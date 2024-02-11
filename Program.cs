@@ -87,61 +87,59 @@ namespace ConsoleApp1
 
         private Order[] c;
 
-        public static Semaphore getSemaph;
+        public static Semaphore getSemaph;      //semaphore for reading
 
-        public static Semaphore setSemaph;        
- 
+        public static Semaphore setSemaph;      //semaphore for writing
+
         public MultiCellBuffer() //constructor
-
         {
             lock (this)
             {
-                // add your implementation here
+                
                 usedCells = 0;                                          //initialize # of used cells
-                setSemaph = new Semaphore(bufferSize, bufferSize);      
-                getSemaph = new Semaphore(bufferSize, bufferSize);
-                c = new Order[bufferSize];
+                c = new Order[bufferSize];                              //initialize the buffer
+                setSemaph = new Semaphore(bufferSize, bufferSize);      //# empty cells = 3
+                getSemaph = new Semaphore(0, bufferSize);               //# filled cells = 0
             }
-
         }
 
         public void SetOneCell(Order data)
         {
-            // add your implementation here
-            //if semaphore count == 0 --> no write, return;
-            //else
-            setSemaph.WaitOne();
-
-            lock (this)
+            
+            Console.WriteLine("Setting in buffer cell");
+            setSemaph.WaitOne();                //# empty cells -= 1
+            
+            lock (this)     // lock the buffer while writing to it
             {
                 while (usedCells == bufferSize) //thread waits if all cells are filled
                 {
                     Monitor.Wait(this);
                 }
 
-                for (int i = 0; i < bufferSize; i++)
+                for (int i = 0; i < bufferSize; i++)    //find the available cell to write
                 {
-                    if (c[i] == null) //makes sure there is no data being over-written 
+                    if (c[i] == null)   //check if this cell is available 
                     {
                         c[i] = data;
                         usedCells++;
-                        i = bufferSize; //exits loop
+                        i = bufferSize; //exits
                     }
                 }
-                setSemaph.Release();
-                Monitor.Pulse(this);
+                getSemaph.Release();            //# filled cells += 1
+                Monitor.Pulse(this);            //notify thread that was waiting
             }
+            Console.WriteLine("Exit setting in buffer");
         }
 
         public Order GetOneCell()
 
         {
-            // add your implementation here
-            getSemaph.WaitOne();
+            
+            getSemaph.WaitOne();                //#filled cells -= 1
             Order result = null;
-            lock (this)
-            {
-                while (usedCells == 0) //thread waits if no cells are full
+            Monitor.Enter(this);                //lock the buffer by using Monitor.Enter
+            try {
+                while (usedCells == 0) //wait if there is nothing to read
                 {
                     Monitor.Wait(this);
                 }
@@ -151,14 +149,15 @@ namespace ConsoleApp1
                     if (c[i] != null) //makes sure there is valid data
                     {
                         result = new Order(c[i].getSenderId(), c[i].getCardNo(), c[i].getUnitPrice(), c[i].getQuantity());
-                        c[i] = null;
+                        c[i] = null;    //set the cell to null
                         usedCells--;
-                        i = bufferSize; //exits loop
+                        i = bufferSize; //exits
                     }
                 }
-                getSemaph.Release();
-                Monitor.Pulse(this);
-            }
+                setSemaph.Release();            //#empty cells += 1
+                Monitor.Pulse(this);            //notify thread that was waiting
+            } finally {  Monitor.Exit(this); }
+            Console.WriteLine("Exit reading buffer");
             return result;
 
         }
@@ -189,7 +188,7 @@ namespace ConsoleApp1
         public Order(string senderId, long cardNo, double unitPrice, int quantity)
 
         {
-            // add your implementation here
+            
             this.senderId = senderId;
             this.cardNo = cardNo;
             this.unitPrice = unitPrice;
@@ -202,7 +201,7 @@ namespace ConsoleApp1
 
         {
 
-            // add your implementation here
+            
             return this.senderId;
 
         }
@@ -211,7 +210,7 @@ namespace ConsoleApp1
 
         {
 
-            // add your implementation here
+            
             return this.cardNo;
         }
 
@@ -219,7 +218,7 @@ namespace ConsoleApp1
 
         {
 
-            // add your implementation here
+            
             return this.unitPrice;
         }
 
@@ -227,7 +226,7 @@ namespace ConsoleApp1
 
         {
 
-            // add your implementation here
+            
             return this.quantity;
         }
 
@@ -244,7 +243,8 @@ namespace ConsoleApp1
         public static bool creditCardCheck(long creditCardNumber)
 
         {
-            // add your implementation here
+            
+            //valid cardNo is in range [10000000,99999999]
             return (creditCardNumber >= 10000000) && (creditCardNumber <= 99999999);
 
         }
@@ -254,7 +254,7 @@ namespace ConsoleApp1
         public static double calculateCharge(double unitPrice, int quantity)
 
         {
-            // add your implementation here
+            
             Random random = new Random();   
             double tax = (unitPrice * quantity) * 0.1;                      //tax is fixed at 10%
             double locationCharge = 20.0 + (random.NextDouble() * 61.0);    //locationCharge is in range [20,80]
@@ -267,7 +267,7 @@ namespace ConsoleApp1
         public static void ProcessOrder(Order order)
 
         {
-            // add your implementation here
+            
             //calculate the orderAmount;
             double orderAmount = calculateCharge(order.getUnitPrice(),order.getQuantity());
             
@@ -292,9 +292,10 @@ namespace ConsoleApp1
         public void agentFun()
 
         {
-            // add your implementation here
+            Console.WriteLine("Starting travel agent now");
+            
             while (MainClass.hotelThreadRunning) {
-                Thread.Sleep(random.Next(1000, 4000));
+                Thread.Sleep(random.Next(1000, 4000));       //An agent creates an order every 1-4 seconds
                 createOrder(Thread.CurrentThread.Name);
             }
         }
@@ -302,23 +303,20 @@ namespace ConsoleApp1
         public void orderProcessConfirm(Order order, double orderAmount)
 
         {
-            // add your implementation here
-            Console.WriteLine("Agent {0}'s order has been processed. The amount to be charged is $" + orderAmount + " ($" + order.getUnitPrice() + " per room for " + order.getQuantity() + " rooms).", order.getSenderId(), Thread.CurrentThread.Name);
-
+            
+            Console.WriteLine("Travel Agent {0}'s order is confirmed. The amount to be charged is ${1}", order.getSenderId(), orderAmount.ToString("0.00"));
         }
 
         private void createOrder(string senderId)
 
         {
-
-            // add your implementation here
+            Console.WriteLine("Inside create order");
+            
             Int32 cardNo = random.Next(10000000, 100000000); //generates a random valid credit card number
-            Int32 quantity = random.Next(5, 50); //generates a random number of units needed (between 5 and 50)
+            Int32 quantity = random.Next(5, 51); //generates a random number of units needed [5,50]
 
-            Order order = new Order(senderId, cardNo, reducedPrice, quantity); //creates orderObject with generated data
-
-            Console.WriteLine("Agent {0}'s order has been created at {1}.", senderId, DateTime.Now.ToString("hh:mm:ss"));
-
+            Order order = new Order(senderId, cardNo, reducedPrice, quantity); //creates orderObject with generated data            
+            
             MainClass.buffer.SetOneCell(order); //inserts order into the MultiCellBuffer
             orderCreation(); //emits event to subscribers
 
@@ -327,14 +325,10 @@ namespace ConsoleApp1
         public void agentOrder(double roomPrice, Thread travelAgent) // Callback from hotel thread
 
         {
-
+            Console.WriteLine("Incoming order for room with price ${0}", roomPrice.ToString("0.00"));
             // write the new reduced price to reducedPrice (a class variable) 
-            reducedPrice = roomPrice;
-
-            //read the new price 
-
-            //calculate the # of rooms to order
-            Console.WriteLine("Rooms are on sale. Agent {0} is about to place an order.", travelAgent.Name);            
+            reducedPrice = roomPrice;            
+                        
             //send the order to the MultiCellBuffer
             if (travelAgent!=null)
                 createOrder(travelAgent.Name);
@@ -360,11 +354,11 @@ namespace ConsoleApp1
 
         {
 
-            // add your implementation here
+            
             while (eventCount < 10)
             {
                 Thread.Sleep(random.Next(1000, 2000)); //generates a new price every 1 - 2 seconds
-                updatePrice(pricingModel());                
+                updatePrice(pricingModel());
             }
             MainClass.hotelThreadRunning = false; // lets retailer threads know that the chicken thread has ended
 
@@ -376,32 +370,34 @@ namespace ConsoleApp1
         public double pricingModel()
         {
             // generate random double in range [80,160]
-            return 80.0 + (random.NextDouble() * 81.0);
+            double newPrice = 80.0 + (random.NextDouble() * 81.0);
+            Console.WriteLine("New price is ${0}", newPrice.ToString("0.00"));
+            return newPrice;
         }
 
         public void updatePrice(double newRoomPrice)
 
-        {
-
-            // add your implementation here
-            currentRoomPrice = newRoomPrice;
-
+        {        
             //Compare the new and current price
             if (PriceCut != null && newRoomPrice < currentRoomPrice) {
-                PriceCut(newRoomPrice, MainClass.travelAgentThreads[threadNo]);
-                threadNo++;
+                Console.WriteLine("Updating the price and calling price cut event");
+                PriceCut(newRoomPrice, MainClass.travelAgentThreads[threadNo]);     //emit priceCutEvent
+                if (threadNo == 4)                      // take turn to emit price cut event to each agents
+                    threadNo = 0;
+                else
+                    threadNo++;
                 eventCount++;
             }
+            currentRoomPrice = newRoomPrice;        //update the price
         }
 
         public void takeOrder() // callback from travel agent
 
         {
-
-            // add your implementation here
-            Order order = MainClass.buffer.GetOneCell(); //retrieves the order from the MultiCellBuffer
-            Thread thread = new Thread(() => OrderProcessing.ProcessOrder(order));
-            thread.Start(); //starts the order processing thread
+            
+            Order order = MainClass.buffer.GetOneCell();                            //retrieves the order from the MultiCellBuffer
+            Thread thread = new Thread(() => OrderProcessing.ProcessOrder(order));  //declares a new thread to process the order
+            thread.Start();                                                         //starts the orderProcessing thread
         }
 
     }
